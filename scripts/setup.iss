@@ -30,7 +30,7 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 [Icons]
 Name: "{group}\SSH Tunnel Manager"; Filename: "{app}\SSHTunnel4Win.exe"
 Name: "{group}\Uninstall SSH Tunnel Manager"; Filename: "{uninstallexe}"
-Name: "{desktop}\SSH Tunnel Manager"; Filename: "{app}\SSHTunnel4Win.exe"; Tasks: desktopicon
+Name: "{autodesktop}\SSH Tunnel Manager"; Filename: "{app}\SSHTunnel4Win.exe"; Tasks: desktopicon
 
 [Registry]
 ; sshtunnel:// URL scheme
