@@ -95,10 +95,14 @@ public static class UpdateService
             UseShellExecute = true
         });
 
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        try
         {
-            System.Windows.Application.Current.Shutdown();
-        });
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                System.Windows.Application.Current.Shutdown();
+            });
+        }
+        catch { }
     }
 
     private static bool IsNewer(string remote, string current)

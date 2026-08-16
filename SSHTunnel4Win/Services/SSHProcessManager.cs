@@ -39,9 +39,30 @@ public class SSHProcessManager
         NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
     }
 
+    // Runs an action on the UI thread. Dispatcher.Invoke throws
+    // TaskCanceledException once the app is shutting down, and an unhandled
+    // exception on a thread-pool thread would crash the whole process -
+    // so swallow it here.
+    private static void InvokeUi(Action action)
+    {
+        try
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null) return;
+            if (dispatcher.CheckAccess())
+                action();
+            else
+                dispatcher.Invoke(action);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"InvokeUi failed: {ex.Message}");
+        }
+    }
+
     private void OnNetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e)
     {
-        Application.Current?.Dispatcher.Invoke(() =>
+        InvokeUi(() =>
         {
             var wasAvailable = _isNetworkAvailable;
             _isNetworkAvailable = e.IsAvailable;
@@ -107,9 +128,12 @@ public class SSHProcessManager
             if (password != null)
             {
                 var askpass = CreateAskPassScript(password, config.Id);
-                process.StartInfo.EnvironmentVariables["SSH_ASKPASS"] = askpass;
-                process.StartInfo.EnvironmentVariables["SSH_ASKPASS_REQUIRE"] = "force";
-                process.StartInfo.EnvironmentVariables["DISPLAY"] = "localhost:0";
+                if (askpass != null)
+                {
+                    process.StartInfo.EnvironmentVariables["SSH_ASKPASS"] = askpass;
+                    process.StartInfo.EnvironmentVariables["SSH_ASKPASS_REQUIRE"] = "force";
+                    process.StartInfo.EnvironmentVariables["DISPLAY"] = "localhost:0";
+                }
             }
         }
 
@@ -118,7 +142,7 @@ public class SSHProcessManager
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data == null) return;
-            Application.Current?.Dispatcher.Invoke(() =>
+            InvokeUi(() =>
             {
                 Logs[id] = (Logs.TryGetValue(id, out var log) ? log : "") + e.Data + "\n";
                 LogChanged?.Invoke(id);
@@ -128,7 +152,7 @@ public class SSHProcessManager
         process.ErrorDataReceived += (_, e) =>
         {
             if (e.Data == null) return;
-            Application.Current?.Dispatcher.Invoke(() =>
+            InvokeUi(() =>
             {
                 Logs[id] = (Logs.TryGetValue(id, out var log) ? log : "") + e.Data + "\n";
                 LogChanged?.Invoke(id);
@@ -137,7 +161,7 @@ public class SSHProcessManager
 
         process.Exited += (_, _) =>
         {
-            Application.Current?.Dispatcher.Invoke(() =>
+            InvokeUi(() =>
             {
                 CleanupAskPassScript(id);
                 CleanupTempKeyFile(id);
@@ -197,7 +221,7 @@ public class SSHProcessManager
             Task.Delay(3000, cts.Token).ContinueWith(t =>
             {
                 if (t.IsCanceled) return;
-                Application.Current?.Dispatcher.Invoke(() =>
+                InvokeUi(() =>
                 {
                     if (_processes.TryGetValue(id, out var p) && !p.HasExited)
                         _status.SetState(id, ConnectionState.Connected);
@@ -289,7 +313,7 @@ public class SSHProcessManager
         Task.Delay(delay, cts.Token).ContinueWith(t =>
         {
             if (t.IsCanceled) return;
-            Application.Current?.Dispatcher.Invoke(() =>
+            InvokeUi(() =>
             {
                 if (!_pendingReconnect.Contains(id)) return;
                 if (!_reconnectConfigs.TryGetValue(id, out var cfg)) return;
@@ -381,13 +405,21 @@ public class SSHProcessManager
         return "ssh.exe";
     }
 
-    private static string CreateAskPassScript(string password, Guid configId)
+    private static string? CreateAskPassScript(string password, Guid configId)
     {
-        var tempDir = Path.GetTempPath();
-        var scriptPath = Path.Combine(tempDir, $"sshtunnel-askpass-{configId}.cmd");
-        var escaped = password.Replace("\"", "\\\"");
-        File.WriteAllText(scriptPath, $"@echo off\r\necho {escaped}\r\n");
-        return scriptPath;
+        try
+        {
+            var tempDir = Path.GetTempPath();
+            var scriptPath = Path.Combine(tempDir, $"sshtunnel-askpass-{configId}.cmd");
+            var escaped = password.Replace("\"", "\\\"");
+            File.WriteAllText(scriptPath, $"@echo off\r\necho {escaped}\r\n");
+            return scriptPath;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to create askpass script: {ex.Message}");
+            return null;
+        }
     }
 
     private static void CleanupAskPassScript(Guid configId)

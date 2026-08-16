@@ -70,11 +70,19 @@ public partial class TunnelListView : UserControl
 
     private void OnStateChanged(Guid id)
     {
-        Dispatcher.Invoke(() =>
+        // Dispatcher.Invoke throws once the app is shutting down - swallow it
+        try
         {
-            var item = _items.FirstOrDefault(i => i.Config.Id == id);
-            item?.RaiseStateChanged();
-        });
+            Dispatcher.Invoke(() =>
+            {
+                var item = _items.FirstOrDefault(i => i.Config.Id == id);
+                item?.RaiseStateChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"OnStateChanged failed: {ex.Message}");
+        }
     }
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -142,6 +142,9 @@
   <data name="Error" xml:space="preserve">
     <value>오류</value>
   </data>
+  <data name="StartupError" xml:space="preserve">
+    <value>SSH Tunnel Manager를 시작하지 못했습니다: {0}. 자세한 내용은 충돌 로그에 기록되었습니다.</value>
+  </data>
   <data name="File" xml:space="preserve">
     <value>파일</value>
   </data>

@@ -64,6 +64,7 @@ public static class Strings
     public static string EditAsText => ResourceManager.GetString("EditAsText") ?? "";
     public static string EnableDisable => ResourceManager.GetString("EnableDisable") ?? "";
     public static string Error => ResourceManager.GetString("Error") ?? "";
+    public static string StartupError => ResourceManager.GetString("StartupError") ?? "";
     public static string File => ResourceManager.GetString("File") ?? "";
     public static string ForwardAgent => ResourceManager.GetString("ForwardAgent") ?? "";
     public static string General => ResourceManager.GetString("General") ?? "";

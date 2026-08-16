@@ -1,10 +1,10 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationIcon Condition="Exists('Assets\app-icon.ico')">Assets\app-icon.ico</ApplicationIcon>
-    <Version>1.1.4</Version>
+    <Version>1.1.5</Version>
     <AssemblyTitle>SSH Tunnel Manager</AssemblyTitle>
     <Company>TypoStudio</Company>
     <Product>SSH Tunnel Manager</Product>
@@ -24,7 +24,7 @@
     <Resource Include="Assets\tray-icon.ico" Condition="Exists('Assets\tray-icon.ico')" />
     <Resource Include="Assets\tray-icon-connected.ico" Condition="Exists('Assets\tray-icon-connected.ico')" />
   </ItemGroup>
-
+	
   <ItemGroup>
     <EmbeddedResource Update="Resources\Strings.resx" />
     <EmbeddedResource Update="Resources\Strings.ko.resx">

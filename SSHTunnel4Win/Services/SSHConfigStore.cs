@@ -96,35 +96,50 @@ public class SSHConfigStore
 
     private void SaveFile(string filePath)
     {
-        var fileEntries = Entries.Where(e => e.SourceFile == filePath).ToList();
-        var mainConfig = SSHConfigParser.ConfigFiles().FirstOrDefault() ?? "";
+        try
+        {
+            var fileEntries = Entries.Where(e => e.SourceFile == filePath).ToList();
+            var mainConfig = SSHConfigParser.ConfigFiles().FirstOrDefault() ?? "";
 
-        if (filePath == mainConfig)
-        {
-            var header = PreserveMainConfigHeader(filePath);
-            var body = SSHConfigParser.Serialize(fileEntries);
-            File.WriteAllText(filePath, header + body);
+            if (filePath == mainConfig)
+            {
+                var header = PreserveMainConfigHeader(filePath);
+                var body = SSHConfigParser.Serialize(fileEntries);
+                File.WriteAllText(filePath, header + body);
+            }
+            else
+            {
+                var content = SSHConfigParser.Serialize(fileEntries);
+                File.WriteAllText(filePath, content);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            var content = SSHConfigParser.Serialize(fileEntries);
-            File.WriteAllText(filePath, content);
+            System.Diagnostics.Debug.WriteLine($"Failed to save SSH config {filePath}: {ex.Message}");
         }
     }
 
     private static string PreserveMainConfigHeader(string filePath)
     {
-        if (!File.Exists(filePath)) return "";
-        var existing = File.ReadAllText(filePath);
-        var headerLines = new List<string>();
-        foreach (var line in existing.Split('\n'))
+        try
         {
-            var trimmed = line.Trim();
-            if (trimmed.StartsWith("Host ", StringComparison.OrdinalIgnoreCase)) break;
-            headerLines.Add(line);
+            if (!File.Exists(filePath)) return "";
+            var existing = File.ReadAllText(filePath);
+            var headerLines = new List<string>();
+            foreach (var line in existing.Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("Host ", StringComparison.OrdinalIgnoreCase)) break;
+                headerLines.Add(line);
+            }
+            if (headerLines.Count > 0 && !string.IsNullOrEmpty(headerLines.Last()))
+                headerLines.Add("");
+            return string.Join("\n", headerLines);
         }
-        if (headerLines.Count > 0 && !string.IsNullOrEmpty(headerLines.Last()))
-            headerLines.Add("");
-        return string.Join("\n", headerLines);
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to read header of {filePath}: {ex.Message}");
+            return "";
+        }
     }
 }

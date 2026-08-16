@@ -58,6 +58,7 @@
   <data name="EditAsText" xml:space="preserve"><value>文本编辑</value></data>
   <data name="EnableDisable" xml:space="preserve"><value>启用/禁用</value></data>
   <data name="Error" xml:space="preserve"><value>错误</value></data>
+  <data name="StartupError" xml:space="preserve"><value>SSH Tunnel Manager 启动失败: {0}。详细信息已写入崩溃日志。</value></data>
   <data name="File" xml:space="preserve"><value>文件</value></data>
   <data name="ForwardAgent" xml:space="preserve"><value>转发代理</value></data>
   <data name="General" xml:space="preserve"><value>常规</value></data>

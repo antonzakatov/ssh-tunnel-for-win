@@ -12,3 +12,4 @@ build.log
 # Claude
 .claude/
 .omc/
+scripts/build-log.txt
