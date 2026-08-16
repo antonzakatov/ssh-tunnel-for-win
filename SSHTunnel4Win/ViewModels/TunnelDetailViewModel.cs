@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -27,6 +28,7 @@ public partial class TunnelDetailViewModel : ObservableObject
     [ObservableProperty] private string _password = "";
     [ObservableProperty] private bool _autoConnect;
     [ObservableProperty] private bool _disconnectOnQuit = true;
+    [ObservableProperty] private bool _autoReconnect;
     [ObservableProperty] private string _additionalArgs = "";
     [ObservableProperty] private ConnectionState _state = ConnectionState.Disconnected;
     [ObservableProperty] private string _errorMessage = "";
@@ -73,6 +75,7 @@ public partial class TunnelDetailViewModel : ObservableObject
         Password = CredentialService.GetPassword(config.Id) ?? "";
         AutoConnect = config.AutoConnect;
         DisconnectOnQuit = config.DisconnectOnQuit;
+        AutoReconnect = config.AutoReconnect;
         AdditionalArgs = config.AdditionalArgs;
         State = _status.GetState(config.Id);
         ErrorMessage = _status.GetErrorMessage(config.Id);
@@ -110,6 +113,7 @@ public partial class TunnelDetailViewModel : ObservableObject
         Tunnels = TunnelEntries.Select(e => e.ToModel()).ToList(),
         AutoConnect = AutoConnect,
         DisconnectOnQuit = DisconnectOnQuit,
+        AutoReconnect = AutoReconnect,
         AdditionalArgs = AdditionalArgs
     };
 
@@ -121,6 +125,7 @@ public partial class TunnelDetailViewModel : ObservableObject
     partial void OnIdentityFileChanged(string value) => SaveDraft();
     partial void OnAutoConnectChanged(bool value) => SaveDraft();
     partial void OnDisconnectOnQuitChanged(bool value) => SaveDraft();
+    partial void OnAutoReconnectChanged(bool value) => SaveDraft();
     partial void OnAdditionalArgsChanged(string value) => SaveDraft();
 
     partial void OnPasswordChanged(string value)
@@ -191,10 +196,9 @@ public partial class TunnelDetailViewModel : ObservableObject
     {
         var config = BuildConfig();
         var encoded = ShareService.Encode(config);
-        Clipboard.SetText(encoded);
+        if (!TryCopyToClipboard(encoded)) return;
         ShowCopied = true;
-        System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
-            Application.Current?.Dispatcher.Invoke(() => ShowCopied = false));
+        ResetCopiedFlag();
     }
 
     [RelayCommand]
@@ -202,10 +206,38 @@ public partial class TunnelDetailViewModel : ObservableObject
     {
         var config = BuildConfig();
         var cli = ShareService.BuildCLI(config);
-        Clipboard.SetText(cli);
+        if (!TryCopyToClipboard(cli)) return;
         ShowCopied = true;
-        System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
-            Application.Current?.Dispatcher.Invoke(() => ShowCopied = false));
+        ResetCopiedFlag();
+    }
+
+    // Clipboard access can throw (e.g. the clipboard is locked by another app),
+    // which would crash the app - retry a few times and give up silently.
+    private static bool TryCopyToClipboard(string text)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            try
+            {
+                Clipboard.SetText(text);
+                if (Clipboard.GetText() == text) return true;
+            }
+            catch (System.Runtime.InteropServices.ExternalException) { }
+            System.Threading.Thread.Sleep(50);
+        }
+        return false;
+    }
+
+    private void ResetCopiedFlag()
+    {
+        Task.Delay(2000).ContinueWith(_ =>
+        {
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() => ShowCopied = false);
+            }
+            catch { }
+        });
     }
 
     public string GetLog() => _processManager.Logs.TryGetValue(_configId, out var log) ? log : "";

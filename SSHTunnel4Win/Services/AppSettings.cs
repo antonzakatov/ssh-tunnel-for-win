@@ -9,6 +9,9 @@ namespace SSHTunnel4Win.Services;
 
 public partial class AppSettings : ObservableObject
 {
+    private const string REGKEY = @"Software\TypoStudio\SSHTunnel";
+    private const string RUN_KEY = "SSHTunnel";
+
     private static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "SSHTunnel", "settings.json");
@@ -33,47 +36,54 @@ public partial class AppSettings : ObservableObject
 
     private void Load()
     {
+
+        SettingsData? data = null;
+
         if (File.Exists(FilePath))
         {
             try
             {
                 var json = File.ReadAllText(FilePath);
-                var data = JsonSerializer.Deserialize<SettingsData>(json);
+                data = JsonSerializer.Deserialize<SettingsData>(json);
                 if (data == null) return;
-                _launchAtLogin = data.LaunchAtLogin;
-                _openManagerOnLaunch = data.OpenManagerOnLaunch;
-                _autoCheckForUpdates = data.AutoCheckForUpdates;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Failed to load settings: {ex.Message}");
             }
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(@"Software\TypoStudio\SSHTunnel");
-                if (key?.GetValue("SettingsBackup") == null) Save();
-            }
-            catch { }
+ 
         }
         else
         {
             try
             {
-                using var key = Registry.CurrentUser.OpenSubKey(@"Software\TypoStudio\SSHTunnel");
+                using var key = Registry.CurrentUser.OpenSubKey(REGKEY);
                 if (key?.GetValue("SettingsBackup") is string json)
                 {
-                    var data = JsonSerializer.Deserialize<SettingsData>(json);
-                    if (data != null)
-                    {
-                        _launchAtLogin = data.LaunchAtLogin;
-                        _openManagerOnLaunch = data.OpenManagerOnLaunch;
-                        _autoCheckForUpdates = data.AutoCheckForUpdates;
-                        Save();
-                    }
+                    data = JsonSerializer.Deserialize<SettingsData>(json);
                 }
             }
             catch { }
         }
+
+        if (data != null)
+        {
+#pragma warning disable MVVMTK0034
+            _launchAtLogin = data.LaunchAtLogin;
+            _openManagerOnLaunch = data.OpenManagerOnLaunch;
+            _autoCheckForUpdates = data.AutoCheckForUpdates;
+#pragma warning restore MVVMTK0034
+            Save();
+
+            UpdateRegistryAutoStart(LaunchAtLogin);
+        }
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(REGKEY);
+            if (key?.GetValue("SettingsBackup") == null) Save();
+        }
+        catch { }
     }
 
     private void Save()
@@ -92,10 +102,10 @@ public partial class AppSettings : ObservableObject
             File.WriteAllText(FilePath, json);
             try
             {
-                using var key = Registry.CurrentUser.CreateSubKey(@"Software\TypoStudio\SSHTunnel");
+                using var key = Registry.CurrentUser.CreateSubKey(REGKEY);
                 key.SetValue("SettingsBackup", json);
             }
-            catch { }
+            catch { throw; }
         }
         catch (Exception ex)
         {
@@ -114,11 +124,13 @@ public partial class AppSettings : ObservableObject
             {
                 var exePath = Process.GetCurrentProcess().MainModule?.FileName;
                 if (exePath != null)
-                    key.SetValue("SSHTunnel", $"\"{exePath}\"");
+                {
+                    key.SetValue(RUN_KEY, $"\"{exePath}\"");
+                }
             }
             else
             {
-                key.DeleteValue("SSHTunnel", throwOnMissingValue: false);
+                key.DeleteValue(RUN_KEY, throwOnMissingValue: false);
             }
         }
         catch (Exception ex)

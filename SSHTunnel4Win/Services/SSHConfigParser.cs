@@ -21,15 +21,38 @@ public static class SSHConfigParser
 
         var mainConfig = GetSshConfigPath();
         if (File.Exists(mainConfig))
-            hosts.AddRange(ParseContent(File.ReadAllText(mainConfig)));
+        {
+            try
+            {
+                hosts.AddRange(ParseContent(File.ReadAllText(mainConfig)));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to parse {mainConfig}: {ex.Message}");
+            }
+        }
 
         var configDir = GetSshConfigDirPath();
         if (Directory.Exists(configDir))
         {
-            foreach (var file in Directory.GetFiles(configDir).OrderBy(f => Path.GetFileName(f)))
+            try
             {
-                if (Path.GetFileName(file).StartsWith(".")) continue;
-                hosts.AddRange(ParseContent(File.ReadAllText(file)));
+                foreach (var file in Directory.GetFiles(configDir).OrderBy(f => Path.GetFileName(f)))
+                {
+                    if (Path.GetFileName(file).StartsWith(".")) continue;
+                    try
+                    {
+                        hosts.AddRange(ParseContent(File.ReadAllText(file)));
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Failed to parse {file}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to list {configDir}: {ex.Message}");
             }
         }
 
@@ -43,15 +66,38 @@ public static class SSHConfigParser
 
         var mainConfig = GetSshConfigPath();
         if (File.Exists(mainConfig))
-            entries.AddRange(ParseFullContent(File.ReadAllText(mainConfig), mainConfig));
+        {
+            try
+            {
+                entries.AddRange(ParseFullContent(File.ReadAllText(mainConfig), mainConfig));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to parse {mainConfig}: {ex.Message}");
+            }
+        }
 
         var configDir = GetSshConfigDirPath();
         if (Directory.Exists(configDir))
         {
-            foreach (var file in Directory.GetFiles(configDir).OrderBy(f => Path.GetFileName(f)))
+            try
             {
-                if (Path.GetFileName(file).StartsWith(".")) continue;
-                entries.AddRange(ParseFullContent(File.ReadAllText(file), file));
+                foreach (var file in Directory.GetFiles(configDir).OrderBy(f => Path.GetFileName(f)))
+                {
+                    if (Path.GetFileName(file).StartsWith(".")) continue;
+                    try
+                    {
+                        entries.AddRange(ParseFullContent(File.ReadAllText(file), file));
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Failed to parse {file}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to list {configDir}: {ex.Message}");
             }
         }
 
@@ -61,17 +107,24 @@ public static class SSHConfigParser
     public static List<string> ConfigFiles()
     {
         var files = new List<string>();
-        var mainConfig = GetSshConfigPath();
-        if (File.Exists(mainConfig)) files.Add(mainConfig);
-
-        var configDir = GetSshConfigDirPath();
-        if (Directory.Exists(configDir))
+        try
         {
-            foreach (var f in Directory.GetFiles(configDir).OrderBy(f => Path.GetFileName(f)))
+            var mainConfig = GetSshConfigPath();
+            if (File.Exists(mainConfig)) files.Add(mainConfig);
+
+            var configDir = GetSshConfigDirPath();
+            if (Directory.Exists(configDir))
             {
-                if (!Path.GetFileName(f).StartsWith("."))
-                    files.Add(f);
+                foreach (var f in Directory.GetFiles(configDir).OrderBy(f => Path.GetFileName(f)))
+                {
+                    if (!Path.GetFileName(f).StartsWith("."))
+                        files.Add(f);
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to enumerate SSH config files: {ex.Message}");
         }
         return files;
     }

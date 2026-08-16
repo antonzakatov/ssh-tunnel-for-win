@@ -167,6 +167,16 @@ public class LogDialog : Window
         Height = 450;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
+        _logBox = new TextBox
+        {
+            Text = vm.GetLog(),
+            IsReadOnly = true,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            FontSize = 11
+        };
+
         var panel = new DockPanel { Margin = new Thickness(16) };
 
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
@@ -184,15 +194,7 @@ public class LogDialog : Window
         closeBtn.Click += (_, _) => Close();
         panel.Children.Add(closeBtn);
 
-        _logBox = new TextBox
-        {
-            Text = vm.GetLog(),
-            IsReadOnly = true,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
-            FontSize = 11
-        };
+        
         panel.Children.Add(_logBox);
 
         Content = panel;

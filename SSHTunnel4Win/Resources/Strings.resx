@@ -142,6 +142,9 @@
   <data name="Error" xml:space="preserve">
     <value>Error</value>
   </data>
+  <data name="StartupError" xml:space="preserve">
+    <value>Failed to start SSH Tunnel Manager: {0}. Details were written to the crash log.</value>
+  </data>
   <data name="File" xml:space="preserve">
     <value>File</value>
   </data>
