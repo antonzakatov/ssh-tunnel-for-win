@@ -1,0 +1,55 @@
+name: Build WPF Installer
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:   # позволяет запускать вручную
+
+jobs:
+  build:
+    runs-on: windows-latest   # обязательна Windows для WPF и Inno Setup
+
+    steps:
+      # 1. Получение исходного кода
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Установка .NET SDK (подберите версию под ваш проект)
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'   # замените на нужную, например '6.0.x', '7.0.x'
+
+      # 3. Кэширование NuGet пакетов (ускоряет последующие сборки)
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.sln') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # 4. Установка Inno Setup 6 через Chocolatey (предустановлен на Windows runner)
+      - name: Install Inno Setup 6
+        run: choco install innosetup -y
+        # Либо просто 'choco install innosetup -y' для последней версии 6.x --version=6.2.2
+
+      # 5. Запуск вашего скрипта сборки
+      - name: Run build-setup.ps1
+        shell: powershell
+        run: |
+          # Разрешаем выполнение скриптов
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          # Запускаем скрипт (при необходимости передайте параметры, например -Configuration Release)
+          ./scripts/build-setup.ps1 -Configuration Release
+
+      # 6. Публикация артефакта (установщика)
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wpf-installer
+          path: |
+            ./scripts/*.exe          # или точный путь, например ./dist/*.exe
+          if-no-files-found: error   # завершится ошибкой, если файл не найден
