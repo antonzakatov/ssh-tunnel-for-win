@@ -55,7 +55,7 @@ if ($LASTEXITCODE -ne 0) {
 # Cleanup
 Remove-Item $PublishDir -Recurse -Force -ErrorAction SilentlyContinue
 
-$setupFile = Join-Path $PSScriptRoot "SSHTunnel4Win-$version-setup.exe"
+$setupFile = Join-Path $PSScriptRoot "SSHTunnel4Win-setup.exe"
 $size = [math]::Round((Get-Item $setupFile).Length / 1MB, 1)
 Write-Host "`n=== Build Complete ===" -ForegroundColor Green
 Write-Host "Setup: $setupFile ($size MB)" -ForegroundColor Green
