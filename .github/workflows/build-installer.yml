@@ -51,5 +51,5 @@ jobs:
         with:
           name: wpf-installer
           path: |
-            ./scripts/*.exe          # или точный путь, например ./dist/*.exe
+            ./scripts/SSHTunnel4Win-*-setup.exe          # или точный путь, например ./dist/*.exe
           if-no-files-found: error   # завершится ошибкой, если файл не найден
