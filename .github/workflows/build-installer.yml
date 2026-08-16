@@ -52,5 +52,12 @@ jobs:
           name: wpf-installer
           path: |
             scripts/*.exe
-            **/SSHTunnel4Win-*-setup.exe          # или точный путь, например ./dist/*.exe
           if-no-files-found: error   # завершится ошибкой, если файл не найден
+ 
+      - name: Create Release and Upload Asset
+        #if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')  # запускать только на теги
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./scripts/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
