@@ -9,6 +9,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using Microsoft.Win32;
 using SSHTunnel4Win.Models;
 
 namespace SSHTunnel4Win.Services;
@@ -28,6 +29,7 @@ public class SSHProcessManager
     private readonly Dictionary<Guid, int> _retryCounts = new();
     private readonly Dictionary<Guid, SSHTunnelConfig> _pendingImmediateReconnect = new();
     private bool _isNetworkAvailable = true;
+    private DateTime _lastAddressChangeAt = DateTime.MinValue;
 
     public Dictionary<Guid, string> Logs { get; } = new();
     public event Action<Guid>? LogChanged;
@@ -37,6 +39,8 @@ public class SSHProcessManager
         _status = status;
         _isNetworkAvailable = NetworkInterface.GetIsNetworkAvailable();
         NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+        NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
     }
 
     // Runs an action on the UI thread. Dispatcher.Invoke throws
@@ -71,6 +75,56 @@ public class SSHProcessManager
         });
     }
 
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Suspend)
+        {
+            // Prevent reconnect attempts from being scheduled while the machine is asleep
+            _isNetworkAvailable = false;
+            return;
+        }
+
+        if (e.Mode != PowerModes.Resume) return;
+
+        InvokeUi(() =>
+        {
+            _isNetworkAvailable = NetworkInterface.GetIsNetworkAvailable();
+
+            // The SSH links are dead after sleep, but the ssh.exe processes stay
+            // alive and only notice after ~90 s of ServerAlive timeouts. Kill them
+            // now so the Exited handler can schedule a fast reconnect.
+            foreach (var (id, process) in _processes.ToList())
+            {
+                try
+                {
+                    if (!process.HasExited)
+                        process.Kill();
+                }
+                catch { }
+            }
+
+            ReconnectPending();
+        });
+    }
+
+    private void OnNetworkAddressChanged(object? sender, EventArgs e)
+    {
+        InvokeUi(() =>
+        {
+            // NetworkAvailabilityChanged often does not fire when a WiFi link
+            // drops and re-associates (the adapter stays "up"), so also react
+            // to address changes. Debounce to avoid churn on DHCP/IPv6 noise.
+            var now = DateTime.UtcNow;
+            if ((now - _lastAddressChangeAt).TotalSeconds < 2) return;
+            _lastAddressChangeAt = now;
+
+            if (!NetworkInterface.GetIsNetworkAvailable()) return;
+            _isNetworkAvailable = true;
+            if (_pendingReconnect.Count > 0)
+                ReconnectPending();
+        });
+    }
+
     public List<ushort> CheckPortConflicts(SSHTunnelConfig config)
     {
         var conflicts = new List<ushort>();
@@ -90,7 +144,9 @@ public class SSHProcessManager
         return conflicts;
     }
 
-    public void Connect(SSHTunnelConfig config)
+    public void Connect(SSHTunnelConfig config) => ConnectInternal(config, resetRetries: true);
+
+    private void ConnectInternal(SSHTunnelConfig config, bool resetRetries)
     {
         var id = config.Id;
         if (_status.GetState(id).IsActive()) return;
@@ -98,8 +154,11 @@ public class SSHProcessManager
         _reconnectConfigs[id] = config;
         _pendingReconnect.Remove(id);
         CancelReconnectTimer(id);
-        _retryCounts.Remove(id);
-        _manualDisconnects.Remove(id);
+        if (resetRetries)
+        {
+            _retryCounts.Remove(id);
+            _manualDisconnects.Remove(id);
+        }
 
         _status.SetState(id, ConnectionState.Connecting);
 
@@ -176,8 +235,10 @@ public class SSHProcessManager
                 {
                     _status.SetState(id, ConnectionState.Disconnected);
                 }
-                else if (_status.GetState(id) == ConnectionState.Connecting)
+                else
                 {
+                    var wasConnecting = _status.GetState(id) == ConnectionState.Connecting;
+
                     // Include last lines of SSH log in error message
                     var lastLog = "";
                     if (Logs.TryGetValue(id, out var fullLog) && !string.IsNullOrEmpty(fullLog))
@@ -187,15 +248,21 @@ public class SSHProcessManager
                     }
                     var msg = $"Connection failed (exit {process.ExitCode})";
                     if (!string.IsNullOrEmpty(lastLog)) msg += "\n" + lastLog;
-                    _status.SetState(id, ConnectionState.Error, msg);
-                }
-                else
-                {
-                    _status.SetState(id, ConnectionState.Disconnected);
-                    // Auto-reconnect on unexpected disconnect
-                    if (!_manualDisconnects.Contains(id)
+
+                    // Auto-reconnect on failed attempts and unexpected disconnects.
+                    // Skip when the user disconnected manually, and when the failure
+                    // is an authentication error - retrying a wrong password or a
+                    // denied key can never succeed.
+                    var autoRetry = !_manualDisconnects.Contains(id)
                         && _reconnectConfigs.TryGetValue(id, out var cfg)
-                        && cfg.AutoReconnect)
+                        && cfg.AutoReconnect
+                        && !IsAuthFailure(lastLog);
+
+                    _status.SetState(id,
+                        wasConnecting ? ConnectionState.Error : ConnectionState.Disconnected,
+                        wasConnecting ? msg : "");
+
+                    if (autoRetry)
                     {
                         _pendingReconnect.Add(id);
                         if (_isNetworkAvailable)
@@ -318,19 +385,25 @@ public class SSHProcessManager
                 if (!_pendingReconnect.Contains(id)) return;
                 if (!_reconnectConfigs.TryGetValue(id, out var cfg)) return;
                 _retryCounts[id] = count + 1;
-                Connect(cfg);
+                // Do not reset the retry count - that would restart the backoff
+                // escalation on every failed attempt.
+                ConnectInternal(cfg, resetRetries: false);
             });
         });
     }
 
     private void ReconnectPending()
     {
+        if (!_isNetworkAvailable) return;
         foreach (var id in _pendingReconnect.ToList())
         {
             _retryCounts[id] = 0;
             ScheduleReconnect(id);
         }
     }
+
+    private static bool IsAuthFailure(string log) =>
+        log.Contains("Permission denied", StringComparison.OrdinalIgnoreCase);
 
     private void CancelReconnectTimer(Guid id)
     {
@@ -358,6 +431,7 @@ public class SSHProcessManager
             "-o", "ExitOnForwardFailure=yes",
             "-o", "ServerAliveInterval=30",
             "-o", "ServerAliveCountMax=3",
+            "-o", "ConnectTimeout=15",
             "-o", "StrictHostKeyChecking=accept-new",
             "-p", config.Port.ToString()
         };
