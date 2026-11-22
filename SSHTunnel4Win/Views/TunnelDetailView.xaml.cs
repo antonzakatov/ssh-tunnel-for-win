@@ -157,6 +157,10 @@ public class LogDialog : Window
     private readonly TunnelDetailViewModel _vm;
     private readonly SSHTunnel4Win.Services.SSHProcessManager _processManager;
     private readonly TextBox _logBox;
+    private readonly System.Windows.Threading.DispatcherTimer _updateTimer;
+    private bool _dirty;
+    private int _lastLength;
+    private bool _closed;
 
     public LogDialog(TunnelDetailViewModel vm, SSHTunnel4Win.Services.SSHProcessManager processManager)
     {
@@ -171,11 +175,13 @@ public class LogDialog : Window
         {
             Text = vm.GetLog(),
             IsReadOnly = true,
+            IsUndoEnabled = false,
             TextWrapping = TextWrapping.Wrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             FontFamily = new System.Windows.Media.FontFamily("Consolas"),
             FontSize = 11
         };
+        _lastLength = _logBox.Text.Length;
 
         var panel = new DockPanel { Margin = new Thickness(16) };
 
@@ -185,7 +191,13 @@ public class LogDialog : Window
         copyBtn.Click += (_, _) => Clipboard.SetText(_logBox.Text);
         toolbar.Children.Add(copyBtn);
         var clearBtn = new Button { Content = Strings.ClearLog };
-        clearBtn.Click += (_, _) => _logBox.Text = "";
+        clearBtn.Click += (_, _) =>
+        {
+            _logBox.Text = "";
+            // Skip everything logged so far - only new lines will be shown.
+            _lastLength = _vm.GetLog().Length;
+            _dirty = false;
+        };
         toolbar.Children.Add(clearBtn);
         panel.Children.Add(toolbar);
 
@@ -194,10 +206,21 @@ public class LogDialog : Window
         closeBtn.Click += (_, _) => Close();
         panel.Children.Add(closeBtn);
 
-        
         panel.Children.Add(_logBox);
 
         Content = panel;
+
+        // Throttled real-time log updates. Replacing the whole TextBox text on
+        // every output line flooded the UI thread with expensive re-layouts,
+        // causing flicker and making the window impossible to close under load.
+        // Instead, mark the view dirty and flush at most ~4 times per second,
+        // appending only the newly produced text.
+        _updateTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = System.TimeSpan.FromMilliseconds(250)
+        };
+        _updateTimer.Tick += (_, _) => FlushLog();
+        _updateTimer.Start();
 
         // Subscribe to real-time log updates
         _processManager.LogChanged += OnLogChanged;
@@ -205,16 +228,33 @@ public class LogDialog : Window
 
     private void OnLogChanged(System.Guid id)
     {
-        if (id != _vm.ConfigId) return;
-        Dispatcher.Invoke(() =>
+        if (id != _vm.ConfigId || _closed) return;
+        _dirty = true;
+    }
+
+    private void FlushLog()
+    {
+        if (!_dirty || _closed || !IsVisible) return;
+        _dirty = false;
+
+        var log = _vm.GetLog();
+        if (log.Length < _lastLength)
         {
-            _logBox.Text = _vm.GetLog();
+            // The manager trimmed the log from the start - rebuild the text.
+            _logBox.Text = log;
+        }
+        else if (log.Length > _lastLength)
+        {
+            _logBox.AppendText(log.Substring(_lastLength));
             _logBox.ScrollToEnd();
-        });
+        }
+        _lastLength = log.Length;
     }
 
     protected override void OnClosed(System.EventArgs e)
     {
+        _closed = true;
+        _updateTimer.Stop();
         _processManager.LogChanged -= OnLogChanged;
         base.OnClosed(e);
     }

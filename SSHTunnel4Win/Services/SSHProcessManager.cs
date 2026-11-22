@@ -9,6 +9,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using SSHTunnel4Win.Models;
 
@@ -34,6 +35,22 @@ public class SSHProcessManager
     public Dictionary<Guid, string> Logs { get; } = new();
     public event Action<Guid>? LogChanged;
 
+    // Cap the retained log to keep memory bounded and TextBox rendering cheap.
+    private const int MaxLogLength = 200_000;
+
+    private void AppendToLog(Guid id, string text)
+    {
+        var log = Logs.TryGetValue(id, out var existing) ? existing + text : text;
+        if (log.Length > MaxLogLength)
+        {
+            // Drop the oldest part, cutting at a line boundary.
+            var cut = log.Length - MaxLogLength;
+            var nl = log.IndexOf('\n', cut);
+            log = nl >= 0 ? log[(nl + 1)..] : log[cut..];
+        }
+        Logs[id] = log;
+    }
+
     public SSHProcessManager(TunnelStatus status)
     {
         _status = status;
@@ -43,10 +60,10 @@ public class SSHProcessManager
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
     }
 
-    // Runs an action on the UI thread. Dispatcher.Invoke throws
-    // TaskCanceledException once the app is shutting down, and an unhandled
-    // exception on a thread-pool thread would crash the whole process -
-    // so swallow it here.
+    // Runs an action on the UI thread. Synchronous Dispatcher.Invoke flooded the
+    // dispatcher with Normal-priority items under load (every ssh output line
+    // triggered one), starving input events and freezing the UI. BeginInvoke with
+    // Background priority keeps input (window close, buttons) responsive.
     private static void InvokeUi(Action action)
     {
         try
@@ -56,7 +73,7 @@ public class SSHProcessManager
             if (dispatcher.CheckAccess())
                 action();
             else
-                dispatcher.Invoke(action);
+                dispatcher.BeginInvoke(DispatcherPriority.Background, action);
         }
         catch (Exception ex)
         {
@@ -203,7 +220,7 @@ public class SSHProcessManager
             if (e.Data == null) return;
             InvokeUi(() =>
             {
-                Logs[id] = (Logs.TryGetValue(id, out var log) ? log : "") + e.Data + "\n";
+                AppendToLog(id, e.Data + "\n");
                 LogChanged?.Invoke(id);
             });
         };
@@ -213,7 +230,7 @@ public class SSHProcessManager
             if (e.Data == null) return;
             InvokeUi(() =>
             {
-                Logs[id] = (Logs.TryGetValue(id, out var log) ? log : "") + e.Data + "\n";
+                AppendToLog(id, e.Data + "\n");
                 LogChanged?.Invoke(id);
             });
         };
@@ -297,7 +314,7 @@ public class SSHProcessManager
         }
         catch (Exception ex)
         {
-            Logs[id] = (Logs.TryGetValue(id, out var errLog) ? errLog : "") + $"ERROR: {ex.Message}\n";
+            AppendToLog(id, $"ERROR: {ex.Message}\n");
             LogChanged?.Invoke(id);
             _status.SetState(id, ConnectionState.Error, ex.Message);
         }
@@ -575,7 +592,7 @@ public class SSHProcessManager
 
     private void AppendLog(Guid configId, string message)
     {
-        Logs[configId] = (Logs.TryGetValue(configId, out var l) ? l : "") + message;
+        AppendToLog(configId, message);
         LogChanged?.Invoke(configId);
     }
 
