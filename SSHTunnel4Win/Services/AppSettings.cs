@@ -18,7 +18,7 @@ public partial class AppSettings : ObservableObject
 
     [ObservableProperty] private bool _launchAtLogin;
     [ObservableProperty] private bool _openManagerOnLaunch;
-    [ObservableProperty] private bool _autoCheckForUpdates = true;
+    [ObservableProperty] private bool _autoCheckForUpdates = false;
 
     public AppSettings()
     {
@@ -143,6 +143,6 @@ public partial class AppSettings : ObservableObject
     {
         public bool LaunchAtLogin { get; set; }
         public bool OpenManagerOnLaunch { get; set; }
-        public bool AutoCheckForUpdates { get; set; } = true;
+        public bool AutoCheckForUpdates { get; set; } = false;
     }
 }

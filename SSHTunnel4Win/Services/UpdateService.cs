@@ -19,7 +19,7 @@ public class UpdateInfo
 
 public static class UpdateService
 {
-    private const string ApiUrl = "https://api.github.com/repos/TypoStudio/ssh-tunnel-for-win/releases/latest";
+    private const string ApiUrl = "https://api.github.com/repos/antonzakatov/ssh-tunnel-for-win/releases/latest";
 
     public static async Task<UpdateInfo?> CheckForUpdateAsync()
     {
